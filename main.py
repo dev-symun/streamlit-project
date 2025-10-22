@@ -36,17 +36,23 @@ START_INDEX = 1
 END_INDEX = 5
 
 # -------------------------------
-# 폼 구성
+# 세션 상태 초기화
 # -------------------------------
-with st.form("data_form"):
-    district = st.selectbox("구 선택", sorted(places_by_district.keys()))
-    place = st.selectbox("장소 선택", sorted(places_by_district[district]))
-    submitted = st.form_submit_button("📡 데이터 불러오기")
+if "data" not in st.session_state:
+    st.session_state.data = None
+if "selected_place" not in st.session_state:
+    st.session_state.selected_place = None
 
 # -------------------------------
-# API 호출 및 데이터 처리
+# 사용자 입력
 # -------------------------------
-if submitted:
+district = st.selectbox("구 선택", sorted(places_by_district.keys()))
+place = st.selectbox("장소 선택", sorted(places_by_district[district]))
+
+# -------------------------------
+# 데이터 불러오기 버튼
+# -------------------------------
+if st.button("📡 데이터 불러오기"):
     try:
         encoded_area = quote(place)
         url = f"{BASE_URL}/{API_KEY}/{TYPE}/{SERVICE}/{START_INDEX}/{END_INDEX}/{encoded_area}"
@@ -58,91 +64,100 @@ if submitted:
         if ppltn is None:
             st.error("⚠️ 해당 지역의 데이터를 찾을 수 없습니다.")
         else:
-            # 기본 인구 데이터
-            def safe_float(val):
-                try:
-                    return float(val)
-                except (TypeError, ValueError):
-                    return 0.0
-
-            def safe_int(val):
-                try:
-                    return int(val)
-                except (TypeError, ValueError):
-                    return 0
-
-            area_name = ppltn.findtext("AREA_NM")
-            congest_lvl = ppltn.findtext("AREA_CONGEST_LVL")
-            congest_msg = ppltn.findtext("AREA_CONGEST_MSG")
-            ppltn_min = safe_int(ppltn.findtext("AREA_PPLTN_MIN"))
-            ppltn_max = safe_int(ppltn.findtext("AREA_PPLTN_MAX"))
-            male = safe_float(ppltn.findtext("MALE_PPLTN_RATE"))
-            female = safe_float(ppltn.findtext("FEMALE_PPLTN_RATE"))
-            ppltn_time = ppltn.findtext("PPLTN_TIME")
-
-            st.subheader(f"📍 {area_name} (업데이트: {ppltn_time})")
-            col1, col2 = st.columns(2)
-            col1.metric("혼잡도", congest_lvl)
-            col2.metric("현재 인구 (명)", f"{ppltn_min:,} ~ {ppltn_max:,}")
-            st.info(congest_msg)
-
-            # 성별 Pie 차트
-            st.write("### 👥 성별 비율")
-            gender_df = pd.DataFrame({
-                "성별": ["남성", "여성"],
-                "비율": [male, female]
-            })
-            fig_pie = px.pie(gender_df, names='성별', values='비율', color='성별',
-                             color_discrete_map={'남성':'skyblue','여성':'lightpink'},
-                             title="현재 인구 성별 비율")
-            st.plotly_chart(fig_pie, use_container_width=True)
-            dominant_gender = "남성" if male > female else "여성"
-            st.info(f"💡 현재 인구에서 가장 많은 성별: {dominant_gender}")
-
-            # 예측 인구 데이터
-            fcst_data = []
-            for f in ppltn.findall(".//FCST_PPLTN"):
-                fcst_data.append({
-                    "시간": f.findtext("FCST_TIME"),
-                    "혼잡도": f.findtext("FCST_CONGEST_LVL"),
-                    "예상 최소 인구": safe_int(f.findtext("FCST_PPLTN_MIN")),
-                    "예상 최대 인구": safe_int(f.findtext("FCST_PPLTN_MAX"))
-                })
-            if fcst_data:
-                df = pd.DataFrame(fcst_data)
-                st.write("### ⏰ 시간대별 인구 예측")
-                st.dataframe(df)
-                fig_line = px.line(df, x="시간", y=["예상 최소 인구", "예상 최대 인구"],
-                                   labels={"value":"인구 수", "variable":"구분"},
-                                   title="시간대별 인구 예측")
-                st.plotly_chart(fig_line, use_container_width=True)
-
-            # 지도 표시
-            st.write("### 🗺️ 위치 지도")
-            coords = {
-                "광화문·덕수궁": (37.5665, 126.9779),
-                "강남 MICE 관광특구": (37.508, 127.060),
-                "홍대 관광특구": (37.5563, 126.9239),
-                "잠실 관광특구": (37.5145, 127.1056),
-                "용산역": (37.5294, 126.9646),
-            }
-            lat, lon = coords.get(area_name, (37.5665, 126.9780))
-            m = folium.Map(location=[lat, lon], zoom_start=15)
-            folium.Marker([lat, lon], popup=area_name).add_to(m)
-            st_folium(m, width=700, height=500)
-
-            # API 원본 데이터 출력
-            st.write("### 🔍 API 원본 데이터")
-            all_keys = [
-                "list_total_count","RESULT_CODE","RESULT_MESSAGE",
-                "AREA_NM","AREA_CD","AREA_CONGEST_LVL","AREA_CONGEST_MSG",
-                "AREA_PPLTN_MIN","AREA_PPLTN_MAX","MALE_PPLTN_RATE","FEMALE_PPLTN_RATE",
-                "PPLTN_RATE_0","PPLTN_RATE_10","PPLTN_RATE_20","PPLTN_RATE_30",
-                "PPLTN_RATE_40","PPLTN_RATE_50","PPLTN_RATE_60","PPLTN_RATE_70",
-                "RESNT_PPLTN_RATE","NON_RESNT_PPLTN_RATE","REPLACE_YN","PPLTN_TIME",
-                "FCST_YN"
-            ]
-            st.json({key: ppltn.findtext(key) if ppltn.findtext(key) else None for key in all_keys})
+            st.session_state.data = ppltn
+            st.session_state.selected_place = place
 
     except Exception as e:
         st.error(f"데이터 조회 실패: {e}")
+
+# -------------------------------
+# 데이터가 있으면 화면에 표시
+# -------------------------------
+if st.session_state.data is not None:
+    ppltn = st.session_state.data
+
+    # 안전한 변환
+    def safe_float(val):
+        try:
+            return float(val)
+        except (TypeError, ValueError):
+            return 0.0
+
+    def safe_int(val):
+        try:
+            return int(val)
+        except (TypeError, ValueError):
+            return 0
+
+    area_name = ppltn.findtext("AREA_NM")
+    congest_lvl = ppltn.findtext("AREA_CONGEST_LVL")
+    congest_msg = ppltn.findtext("AREA_CONGEST_MSG")
+    ppltn_min = safe_int(ppltn.findtext("AREA_PPLTN_MIN"))
+    ppltn_max = safe_int(ppltn.findtext("AREA_PPLTN_MAX"))
+    male = safe_float(ppltn.findtext("MALE_PPLTN_RATE"))
+    female = safe_float(ppltn.findtext("FEMALE_PPLTN_RATE"))
+    ppltn_time = ppltn.findtext("PPLTN_TIME")
+
+    st.subheader(f"📍 {area_name} (업데이트: {ppltn_time})")
+    col1, col2 = st.columns(2)
+    col1.metric("혼잡도", congest_lvl)
+    col2.metric("현재 인구 (명)", f"{ppltn_min:,} ~ {ppltn_max:,}")
+    st.info(congest_msg)
+
+    # 성별 Pie 차트
+    st.write("### 👥 성별 비율")
+    gender_df = pd.DataFrame({
+        "성별": ["남성", "여성"],
+        "비율": [male, female]
+    })
+    fig_pie = px.pie(gender_df, names='성별', values='비율', color='성별',
+                     color_discrete_map={'남성':'skyblue','여성':'lightpink'},
+                     title="현재 인구 성별 비율")
+    st.plotly_chart(fig_pie, use_container_width=True)
+    dominant_gender = "남성" if male > female else "여성"
+    st.info(f"💡 현재 인구에서 가장 많은 성별: {dominant_gender}")
+
+    # 예측 인구 데이터
+    fcst_data = []
+    for f in ppltn.findall(".//FCST_PPLTN"):
+        fcst_data.append({
+            "시간": f.findtext("FCST_TIME"),
+            "혼잡도": f.findtext("FCST_CONGEST_LVL"),
+            "예상 최소 인구": safe_int(f.findtext("FCST_PPLTN_MIN")),
+            "예상 최대 인구": safe_int(f.findtext("FCST_PPLTN_MAX"))
+        })
+    if fcst_data:
+        df = pd.DataFrame(fcst_data)
+        st.write("### ⏰ 시간대별 인구 예측")
+        st.dataframe(df)
+        fig_line = px.line(df, x="시간", y=["예상 최소 인구", "예상 최대 인구"],
+                           labels={"value":"인구 수", "variable":"구분"},
+                           title="시간대별 인구 예측")
+        st.plotly_chart(fig_line, use_container_width=True)
+
+    # 지도 표시
+    st.write("### 🗺️ 위치 지도")
+    coords = {
+        "광화문·덕수궁": (37.5665, 126.9779),
+        "강남 MICE 관광특구": (37.508, 127.060),
+        "홍대 관광특구": (37.5563, 126.9239),
+        "잠실 관광특구": (37.5145, 127.1056),
+        "용산역": (37.5294, 126.9646),
+    }
+    lat, lon = coords.get(area_name, (37.5665, 126.9780))
+    m = folium.Map(location=[lat, lon], zoom_start=15)
+    folium.Marker([lat, lon], popup=area_name).add_to(m)
+    st_folium(m, width=700, height=500)
+
+    # API 원본 데이터 출력
+    st.write("### 🔍 API 원본 데이터")
+    all_keys = [
+        "list_total_count","RESULT_CODE","RESULT_MESSAGE",
+        "AREA_NM","AREA_CD","AREA_CONGEST_LVL","AREA_CONGEST_MSG",
+        "AREA_PPLTN_MIN","AREA_PPLTN_MAX","MALE_PPLTN_RATE","FEMALE_PPLTN_RATE",
+        "PPLTN_RATE_0","PPLTN_RATE_10","PPLTN_RATE_20","PPLTN_RATE_30",
+        "PPLTN_RATE_40","PPLTN_RATE_50","PPLTN_RATE_60","PPLTN_RATE_70",
+        "RESNT_PPLTN_RATE","NON_RESNT_PPLTN_RATE","REPLACE_YN","PPLTN_TIME",
+        "FCST_YN"
+    ]
+    st.json({key: ppltn.findtext(key) if ppltn.findtext(key) else None for key in all_keys})
