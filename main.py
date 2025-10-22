@@ -4,7 +4,8 @@ import xml.etree.ElementTree as ET
 from urllib.parse import quote
 import folium
 from streamlit_folium import st_folium
-import matplotlib.pyplot as plt
+import plotly.express as px
+import pandas as pd
 
 # -------------------------------
 # 기본 설정
@@ -76,24 +77,23 @@ if st.button("📡 데이터 불러오기"):
             st.info(congest_msg)
             
             # -------------------------------
-            # 성별 비율 원그래프
+            # 성별 비율 Plotly Pie
             # -------------------------------
             st.write("### 👥 성별 비율")
-            labels = ["남성", "여성"]
-            sizes = [male, female]
-            colors = ['skyblue', 'lightpink']
+            gender_df = pd.DataFrame({
+                "성별": ["남성", "여성"],
+                "비율": [male, female]
+            })
+            fig_pie = px.pie(gender_df, names='성별', values='비율', color='성별',
+                             color_discrete_map={'남성':'skyblue','여성':'lightpink'},
+                             title="현재 인구 성별 비율")
+            st.plotly_chart(fig_pie, use_container_width=True)
             
-            fig, ax = plt.subplots()
-            ax.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90, colors=colors)
-            ax.axis('equal')
-            st.pyplot(fig)
-            
-            # 가장 많은 성별
             dominant_gender = "남성" if male > female else "여성"
             st.info(f"💡 현재 인구에서 가장 많은 성별: {dominant_gender}")
             
             # -------------------------------
-            # 예측 인구 데이터
+            # 예측 인구 데이터 Plotly Line
             # -------------------------------
             fcst_data = []
             for f in ppltn.findall(".//FCST_PPLTN"):
@@ -104,11 +104,13 @@ if st.button("📡 데이터 불러오기"):
                     "예상 최대 인구": int(f.findtext("FCST_PPLTN_MAX"))
                 })
             if fcst_data:
-                import pandas as pd
                 df = pd.DataFrame(fcst_data)
                 st.write("### ⏰ 시간대별 인구 예측")
                 st.dataframe(df)
-                st.line_chart(df.set_index("시간")[["예상 최소 인구", "예상 최대 인구"]])
+                fig_line = px.line(df, x="시간", y=["예상 최소 인구", "예상 최대 인구"],
+                                   labels={"value":"인구 수", "variable":"구분"},
+                                   title="시간대별 인구 예측")
+                st.plotly_chart(fig_line, use_container_width=True)
             
             # -------------------------------
             # Folium 지도 표시
