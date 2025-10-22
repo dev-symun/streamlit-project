@@ -129,15 +129,15 @@ if st.button("📡 데이터 불러오기"):
             st_folium(m, width=700, height=500)
 
 
-    st.write("### 🔍 API 원본 데이터")
-    st.json({key: ppltn.findtext(key) if ppltn.findtext(key) else None for key in [
-        "AREA_NM","AREA_CD","AREA_CONGEST_LVL","AREA_CONGEST_MSG",
-        "AREA_PPLTN_MIN","AREA_PPLTN_MAX","MALE_PPLTN_RATE","FEMALE_PPLTN_RATE",
-        "PPLTN_RATE_0","PPLTN_RATE_10","PPLTN_RATE_20","PPLTN_RATE_30",
-        "PPLTN_RATE_40","PPLTN_RATE_50","PPLTN_RATE_60","PPLTN_RATE_70",
-        "RESNT_PPLTN_RATE","NON_RESNT_PPLTN_RATE","REPLACE_YN","PPLTN_TIME",
-        "FCST_YN"
-    ]})
+            st.write("### 🔍 API 원본 데이터")
+            st.json({key: ppltn.findtext(key) if ppltn.findtext(key) else None for key in [
+                "AREA_NM","AREA_CD","AREA_CONGEST_LVL","AREA_CONGEST_MSG",
+                "AREA_PPLTN_MIN","AREA_PPLTN_MAX","MALE_PPLTN_RATE","FEMALE_PPLTN_RATE",
+                "PPLTN_RATE_0","PPLTN_RATE_10","PPLTN_RATE_20","PPLTN_RATE_30",
+                "PPLTN_RATE_40","PPLTN_RATE_50","PPLTN_RATE_60","PPLTN_RATE_70",
+                "RESNT_PPLTN_RATE","NON_RESNT_PPLTN_RATE","REPLACE_YN","PPLTN_TIME",
+                "FCST_YN"
+            ]})
             
     except Exception as e:
         st.error(f"데이터 조회 실패: {e}")
