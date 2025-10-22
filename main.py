@@ -26,6 +26,21 @@ places_by_district = {
 }
 
 # -------------------------------
+# 안전한 숫자 변환 함수
+# -------------------------------
+def safe_int(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+def safe_float(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+# -------------------------------
 # 1️⃣ 구 선택
 # -------------------------------
 district = st.selectbox("구 선택", sorted(places_by_district.keys()))
@@ -38,7 +53,7 @@ place = st.selectbox("장소 선택", sorted(places_by_district[district]))
 # -------------------------------
 # API 설정
 # -------------------------------
-API_KEY = "78665a616473796d3339716b4d446c"
+API_KEY = st.secrets["API_KEY"]  # Edit secrets 에서 설정한 API_KEY 사용
 BASE_URL = "http://openapi.seoul.go.kr:8088"
 TYPE = "xml"
 SERVICE = "citydata_ppltn"
@@ -60,14 +75,16 @@ if st.button("📡 데이터 불러오기"):
         if ppltn is None:
             st.error("해당 지역의 데이터를 찾을 수 없습니다.")
         else:
-            # 기본 인구 데이터
+            # -------------------------------
+            # 기본 인구 데이터 추출
+            # -------------------------------
             area_name = ppltn.findtext("AREA_NM")
             congest_lvl = ppltn.findtext("AREA_CONGEST_LVL")
             congest_msg = ppltn.findtext("AREA_CONGEST_MSG")
-            ppltn_min = int(ppltn.findtext("AREA_PPLTN_MIN"))
-            ppltn_max = int(ppltn.findtext("AREA_PPLTN_MAX"))
-            male = float(ppltn.findtext("MALE_PPLTN_RATE"))
-            female = float(ppltn.findtext("FEMALE_PPLTN_RATE"))
+            ppltn_min = safe_int(ppltn.findtext("AREA_PPLTN_MIN"))
+            ppltn_max = safe_int(ppltn.findtext("AREA_PPLTN_MAX"))
+            male = safe_float(ppltn.findtext("MALE_PPLTN_RATE"))
+            female = safe_float(ppltn.findtext("FEMALE_PPLTN_RATE"))
             ppltn_time = ppltn.findtext("PPLTN_TIME")
             
             st.subheader(f"📍 {area_name} (업데이트: {ppltn_time})")
@@ -100,8 +117,8 @@ if st.button("📡 데이터 불러오기"):
                 fcst_data.append({
                     "시간": f.findtext("FCST_TIME"),
                     "혼잡도": f.findtext("FCST_CONGEST_LVL"),
-                    "예상 최소 인구": int(f.findtext("FCST_PPLTN_MIN")),
-                    "예상 최대 인구": int(f.findtext("FCST_PPLTN_MAX"))
+                    "예상 최소 인구": safe_int(f.findtext("FCST_PPLTN_MIN")),
+                    "예상 최대 인구": safe_int(f.findtext("FCST_PPLTN_MAX"))
                 })
             if fcst_data:
                 df = pd.DataFrame(fcst_data)
@@ -127,17 +144,21 @@ if st.button("📡 데이터 불러오기"):
             m = folium.Map(location=[lat, lon], zoom_start=15)
             folium.Marker([lat, lon], popup=area_name).add_to(m)
             st_folium(m, width=700, height=500)
-
-
+            
+            # -------------------------------
+            # API 원본 데이터 출력
+            # -------------------------------
             st.write("### 🔍 API 원본 데이터")
-            st.json({key: ppltn.findtext(key) if ppltn.findtext(key) else None for key in [
+            fields = [
+                "list_total_count","RESULT_CODE","RESULT_MESSAGE",
                 "AREA_NM","AREA_CD","AREA_CONGEST_LVL","AREA_CONGEST_MSG",
                 "AREA_PPLTN_MIN","AREA_PPLTN_MAX","MALE_PPLTN_RATE","FEMALE_PPLTN_RATE",
                 "PPLTN_RATE_0","PPLTN_RATE_10","PPLTN_RATE_20","PPLTN_RATE_30",
                 "PPLTN_RATE_40","PPLTN_RATE_50","PPLTN_RATE_60","PPLTN_RATE_70",
                 "RESNT_PPLTN_RATE","NON_RESNT_PPLTN_RATE","REPLACE_YN","PPLTN_TIME",
-                "FCST_YN"
-            ]})
-            
+                "FCST_YN","FCST_PPLTN","FCST_TIME","FCST_CONGEST_LVL","FCST_PPLTN_MIN","FCST_PPLTN_MAX"
+            ]
+            st.json({key: ppltn.findtext(key) if ppltn.findtext(key) else None for key in fields})
+
     except Exception as e:
         st.error(f"데이터 조회 실패: {e}")
