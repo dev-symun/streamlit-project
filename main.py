@@ -15,11 +15,10 @@ st.title("📊 서울시 실시간 인구 데이터 (citydata_ppltn)")
 # -------------------------------
 # API 설정
 # -------------------------------
-API_KEY = st.secrets["API_KEY"]
+API_KEY = st.secrets["API_KEY"]  # Streamlit Secrets
 BASE_URL = "http://openapi.seoul.go.kr:8088"
 TYPE = "xml"
 SERVICE = "citydata_ppltn"
-
 START_INDEX = 1
 END_INDEX = 200  # 충분히 큰 값으로 모든 장소 가져오기
 
@@ -29,19 +28,36 @@ END_INDEX = 200  # 충분히 큰 값으로 모든 장소 가져오기
 @st.cache_data
 def get_all_places():
     url = f"{BASE_URL}/{API_KEY}/{TYPE}/{SERVICE}/{START_INDEX}/{END_INDEX}"
-    resp = requests.get(url)
+    resp = requests.get(url, timeout=10)
     resp.raise_for_status()
     root = ET.fromstring(resp.content)
     citydata = root.findall(".//SeoulRtd.citydata_ppltn")
-    # AREA_NM과 AREA_CD 추출
-    places = [{"name": c.findtext("AREA_NM"), "code": c.findtext("AREA_CD")} for c in citydata]
-    df = pd.DataFrame(places).dropna()
+    
+    places = []
+    for c in citydata:
+        area_name = c.findtext("AREA_NM")
+        area_code = c.findtext("AREA_CD")
+        if area_name and area_code:
+            places.append({"name": area_name, "code": area_code})
+    
+    # 데이터 없으면 빈 DataFrame 반환
+    if not places:
+        return pd.DataFrame(columns=["name", "code"])
+    
+    df = pd.DataFrame(places)
     return df
 
+# -------------------------------
+# 장소 데이터 불러오기
+# -------------------------------
 try:
     places_df = get_all_places()
 except Exception as e:
     st.error(f"장소 목록 로딩 실패: {e}")
+    st.stop()
+
+if places_df.empty:
+    st.error("장소 목록이 없습니다.")
     st.stop()
 
 # -------------------------------
@@ -57,7 +73,7 @@ if st.button("📡 데이터 불러오기"):
     try:
         encoded_area = quote(area)
         url = f"{BASE_URL}/{API_KEY}/{TYPE}/{SERVICE}/{START_INDEX}/{START_INDEX+4}/{encoded_area}"
-        response = requests.get(url)
+        response = requests.get(url, timeout=10)
         response.raise_for_status()
         root = ET.fromstring(response.content)
         ppltn = root.find(".//SeoulRtd.citydata_ppltn")
@@ -65,7 +81,9 @@ if st.button("📡 데이터 불러오기"):
         if ppltn is None:
             st.error("해당 지역의 데이터를 찾을 수 없습니다.")
         else:
+            # -------------------------------
             # 기본 인구 데이터
+            # -------------------------------
             area_name = ppltn.findtext("AREA_NM")
             congest_lvl = ppltn.findtext("AREA_CONGEST_LVL")
             congest_msg = ppltn.findtext("AREA_CONGEST_MSG")
@@ -75,18 +93,20 @@ if st.button("📡 데이터 불러오기"):
             female = float(ppltn.findtext("FEMALE_PPLTN_RATE"))
             ppltn_time = ppltn.findtext("PPLTN_TIME")
             
-            # 데이터 표시
             st.subheader(f"📍 {area_name} (업데이트: {ppltn_time})")
             col1, col2 = st.columns(2)
             col1.metric("혼잡도", congest_lvl)
             col2.metric("현재 인구 (명)", f"{ppltn_min:,} ~ {ppltn_max:,}")
             st.info(congest_msg)
             
+            # 성별 비율
             st.write("### 👥 성별 비율")
             st.progress(int(male))
             st.write(f"남성 {male}% / 여성 {female}%")
             
-            # 예측 데이터
+            # -------------------------------
+            # 예측 인구 데이터
+            # -------------------------------
             fcst_data = []
             for f in ppltn.findall(".//FCST_PPLTN"):
                 fcst_data.append({
@@ -100,13 +120,15 @@ if st.button("📡 데이터 불러오기"):
                 st.write("### ⏰ 시간대별 인구 예측")
                 st.dataframe(df)
                 st.line_chart(df.set_index("시간")[["예상 최소 인구", "예상 최대 인구"]])
+            else:
+                st.warning("예측 데이터가 없습니다.")
             
             # -------------------------------
-            # 4️⃣ Folium 지도 표시 (서울 중심 예시)
+            # 4️⃣ Folium 지도 표시 (서울 중심 좌표 사용)
             # -------------------------------
             m = folium.Map(location=[37.5665, 126.9780], zoom_start=12)
             folium.Marker(
-                location=[37.5665, 126.9780], # 서울 중심 좌표, API 좌표 없으므로 임시
+                location=[37.5665, 126.9780],  # 좌표가 API에 없으면 서울 중심 사용
                 popup=f"{area_name}\n인구: {ppltn_min}~{ppltn_max}",
                 tooltip=area_name,
                 icon=folium.Icon(color="red", icon="info-sign")
