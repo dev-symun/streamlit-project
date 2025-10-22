@@ -2,8 +2,6 @@ import streamlit as st
 import requests
 import xml.etree.ElementTree as ET
 import pandas as pd
-import folium
-from streamlit_folium import st_folium
 from urllib.parse import quote
 
 # -------------------------------
@@ -13,127 +11,91 @@ st.set_page_config(page_title="서울시 실시간 인구 데이터", page_icon=
 st.title("📊 서울시 실시간 인구 데이터 (citydata_ppltn)")
 
 # -------------------------------
-# API 설정
+# 사용자 입력
 # -------------------------------
-API_KEY = st.secrets["API_KEY"]  # Streamlit Secrets
+st.markdown("서울의 주요 지역 중 하나를 입력하세요 (예: 광화문·덕수궁, 명동, 강남 MICE 관광특구 등)")
+area = st.text_input("조회할 지역명 입력", "광화문·덕수궁")
+
+# -------------------------------
+# API 요청 URL 구성
+# -------------------------------
+API_KEY = "78665a616473796d3339716b4d446c"
 BASE_URL = "http://openapi.seoul.go.kr:8088"
 TYPE = "xml"
 SERVICE = "citydata_ppltn"
 START_INDEX = 1
-END_INDEX = 200  # 충분히 큰 값으로 모든 장소 가져오기
+END_INDEX = 5
 
 # -------------------------------
-# 1️⃣ 전체 장소 목록 가져오기
-# -------------------------------
-@st.cache_data
-def get_all_places():
-    url = f"{BASE_URL}/{API_KEY}/{TYPE}/{SERVICE}/{START_INDEX}/{END_INDEX}"
-    resp = requests.get(url, timeout=10)
-    resp.raise_for_status()
-    root = ET.fromstring(resp.content)
-    citydata = root.findall(".//SeoulRtd.citydata_ppltn")
-    
-    places = []
-    for c in citydata:
-        area_name = c.findtext("AREA_NM")
-        area_code = c.findtext("AREA_CD")
-        if area_name and area_code:
-            places.append({"name": area_name, "code": area_code})
-    
-    # 데이터 없으면 빈 DataFrame 반환
-    if not places:
-        return pd.DataFrame(columns=["name", "code"])
-    
-    df = pd.DataFrame(places)
-    return df
-
-# -------------------------------
-# 장소 데이터 불러오기
-# -------------------------------
-try:
-    places_df = get_all_places()
-except Exception as e:
-    st.error(f"장소 목록 로딩 실패: {e}")
-    st.stop()
-
-if places_df.empty:
-    st.error("장소 목록이 없습니다.")
-    st.stop()
-
-# -------------------------------
-# 2️⃣ 사용자 선택 (콤보박스)
-# -------------------------------
-st.markdown("서울시 주요 장소를 선택하세요")
-area = st.selectbox("장소 선택", sorted(places_df["name"].unique()))
-
-# -------------------------------
-# 3️⃣ 선택한 장소 API 호출
+# API 요청
 # -------------------------------
 if st.button("📡 데이터 불러오기"):
     try:
         encoded_area = quote(area)
-        url = f"{BASE_URL}/{API_KEY}/{TYPE}/{SERVICE}/{START_INDEX}/{START_INDEX+4}/{encoded_area}"
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        root = ET.fromstring(response.content)
-        ppltn = root.find(".//SeoulRtd.citydata_ppltn")
-        
-        if ppltn is None:
-            st.error("해당 지역의 데이터를 찾을 수 없습니다.")
+        url = f"{BASE_URL}/{API_KEY}/{TYPE}/{SERVICE}/{START_INDEX}/{END_INDEX}/{encoded_area}"
+
+        response = requests.get(url)
+        if response.status_code != 200:
+            st.error(f"요청 실패 (HTTP {response.status_code})")
         else:
-            # -------------------------------
-            # 기본 인구 데이터
-            # -------------------------------
-            area_name = ppltn.findtext("AREA_NM")
-            congest_lvl = ppltn.findtext("AREA_CONGEST_LVL")
-            congest_msg = ppltn.findtext("AREA_CONGEST_MSG")
-            ppltn_min = int(ppltn.findtext("AREA_PPLTN_MIN"))
-            ppltn_max = int(ppltn.findtext("AREA_PPLTN_MAX"))
-            male = float(ppltn.findtext("MALE_PPLTN_RATE"))
-            female = float(ppltn.findtext("FEMALE_PPLTN_RATE"))
-            ppltn_time = ppltn.findtext("PPLTN_TIME")
-            
-            st.subheader(f"📍 {area_name} (업데이트: {ppltn_time})")
-            col1, col2 = st.columns(2)
-            col1.metric("혼잡도", congest_lvl)
-            col2.metric("현재 인구 (명)", f"{ppltn_min:,} ~ {ppltn_max:,}")
-            st.info(congest_msg)
-            
-            # 성별 비율
-            st.write("### 👥 성별 비율")
-            st.progress(int(male))
-            st.write(f"남성 {male}% / 여성 {female}%")
-            
-            # -------------------------------
-            # 예측 인구 데이터
-            # -------------------------------
-            fcst_data = []
-            for f in ppltn.findall(".//FCST_PPLTN"):
-                fcst_data.append({
-                    "시간": f.findtext("FCST_TIME"),
-                    "혼잡도": f.findtext("FCST_CONGEST_LVL"),
-                    "예상 최소 인구": int(f.findtext("FCST_PPLTN_MIN")),
-                    "예상 최대 인구": int(f.findtext("FCST_PPLTN_MAX"))
-                })
-            if fcst_data:
-                df = pd.DataFrame(fcst_data)
-                st.write("### ⏰ 시간대별 인구 예측")
-                st.dataframe(df)
-                st.line_chart(df.set_index("시간")[["예상 최소 인구", "예상 최대 인구"]])
+            root = ET.fromstring(response.content)
+            ppltn = root.find(".//SeoulRtd.citydata_ppltn")
+
+            if ppltn is None:
+                st.error("⚠️ 해당 지역의 데이터를 찾을 수 없습니다. (지역명을 정확히 입력하세요)")
             else:
-                st.warning("예측 데이터가 없습니다.")
-            
-            # -------------------------------
-            # 4️⃣ Folium 지도 표시 (서울 중심 좌표 사용)
-            # -------------------------------
-            m = folium.Map(location=[37.5665, 126.9780], zoom_start=12)
-            folium.Marker(
-                location=[37.5665, 126.9780],  # 좌표가 API에 없으면 서울 중심 사용
-                popup=f"{area_name}\n인구: {ppltn_min}~{ppltn_max}",
-                tooltip=area_name,
-                icon=folium.Icon(color="red", icon="info-sign")
-            ).add_to(m)
-            st_folium(m, width=700, height=500)
-            
+                # -------------------------------
+                # 기본 인구 데이터 추출
+                # -------------------------------
+                area_name = ppltn.findtext("AREA_NM")
+                congest_lvl = ppltn.findtext("AREA_CONGEST_LVL")
+                congest_msg = ppltn.findtext("AREA_CONGEST_MSG")
+                ppltn_min = int(ppltn.findtext("AREA_PPLTN_MIN"))
+                ppltn_max = int(ppltn.findtext("AREA_PPLTN_MAX"))
+                male = float(ppltn.findtext("MALE_PPLTN_RATE"))
+                female = float(ppltn.findtext("FEMALE_PPLTN_RATE"))
+                ppltn_time = ppltn.findtext("PPLTN_TIME")
+
+                # -------------------------------
+                # 시각적 요약
+                # -------------------------------
+                st.subheader(f"📍 {area_name} (업데이트: {ppltn_time})")
+                col1, col2 = st.columns(2)
+                col1.metric("혼잡도", congest_lvl)
+                col2.metric("현재 인구 (명)", f"{ppltn_min:,} ~ {ppltn_max:,}")
+
+                st.info(congest_msg)
+
+                # -------------------------------
+                # 성별 비율
+                # -------------------------------
+                st.write("### 👥 성별 비율")
+                st.progress(int(male))
+                st.write(f"남성 {male}% / 여성 {female}%")
+
+                # -------------------------------
+                # 예측 인구 데이터
+                # -------------------------------
+                fcst_data = []
+                for f in ppltn.findall(".//FCST_PPLTN"):
+                    fcst_data.append({
+                        "시간": f.findtext("FCST_TIME"),
+                        "혼잡도": f.findtext("FCST_CONGEST_LVL"),
+                        "예상 최소 인구": int(f.findtext("FCST_PPLTN_MIN")),
+                        "예상 최대 인구": int(f.findtext("FCST_PPLTN_MAX"))
+                    })
+
+                if fcst_data:
+                    df = pd.DataFrame(fcst_data)
+                    st.write("### ⏰ 시간대별 인구 예측")
+                    st.dataframe(df)
+
+                    # -------------------------------
+                    # 시각화
+                    # -------------------------------
+                    st.line_chart(df.set_index("시간")[["예상 최소 인구", "예상 최대 인구"]])
+                else:
+                    st.warning("예측 데이터가 없습니다.")
+
     except Exception as e:
-        st.error(f"데이터 조회 실패: {e}")
+        st.error(f"오류 발생: {e}")
