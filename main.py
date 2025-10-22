@@ -1,11 +1,8 @@
 import streamlit as st
 import requests
 import xml.etree.ElementTree as ET
-from urllib.parse import quote
-import folium
-from streamlit_folium import st_folium
-import plotly.express as px
 import pandas as pd
+from urllib.parse import quote
 
 # -------------------------------
 # 기본 설정
@@ -14,119 +11,129 @@ st.set_page_config(page_title="서울시 실시간 인구 데이터", page_icon=
 st.title("📊 서울시 실시간 인구 데이터 (citydata_ppltn)")
 
 # -------------------------------
-# 서울시 구별 장소 매핑 (예시)
+# API 기본값
 # -------------------------------
-places_by_district = {
-    "강남구": ["강남 MICE 관광특구", "코엑스", "강남역", "선릉역", "역삼역", "압구정로데오거리", "삼성역"],
-    "종로구": ["광화문·덕수궁", "경복궁", "보신각", "창덕궁·종묘", "북촌한옥마을", "덕수궁길·정동길", "인사동", "청계천", "서울광장"],
-    "마포구": ["홍대 관광특구", "홍대입구역", "망원한강공원", "상수역", "연남동", "합정역"],
-    "용산구": ["이태원 관광특구", "용산역", "남산타워", "이태원역", "국립중앙박물관·용산가족공원", "이태원 앤틱가구거리"],
-    "송파구": ["잠실 관광특구", "롯데월드", "잠실역", "석촌호수", "잠실종합운동장", "잠실한강공원", "잠실새내역"],
-    "영등포구": ["여의도", "영등포 타임스퀘어", "여의도한강공원", "63빌딩"],
-}
-
-# -------------------------------
-# 1️⃣ 구 선택
-# -------------------------------
-district = st.selectbox("구 선택", sorted(places_by_district.keys()))
-
-# -------------------------------
-# 2️⃣ 선택한 구의 장소 선택
-# -------------------------------
-place = st.selectbox("장소 선택", sorted(places_by_district[district]))
-
-# -------------------------------
-# API 설정
-# -------------------------------
-API_KEY = "78665a616473796d3339716b4d446c"
+API_KEY = st.secrets["API_KEY"]
 BASE_URL = "http://openapi.seoul.go.kr:8088"
 TYPE = "xml"
 SERVICE = "citydata_ppltn"
 START_INDEX = 1
-END_INDEX = 5
+END_INDEX = 116  # 서울시 주요 장소 전체 범위
 
 # -------------------------------
-# 3️⃣ 선택한 장소 API 호출
+# API로 모든 장소 불러오기
 # -------------------------------
-if st.button("📡 데이터 불러오기"):
-    try:
-        encoded_area = quote(place)
-        url = f"{BASE_URL}/{API_KEY}/{TYPE}/{SERVICE}/{START_INDEX}/{END_INDEX}/{encoded_area}"
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        root = ET.fromstring(response.content)
-        ppltn = root.find(".//SeoulRtd.citydata_ppltn")
-        
-        if ppltn is None:
-            st.error("해당 지역의 데이터를 찾을 수 없습니다.")
-        else:
-            # 기본 인구 데이터
-            area_name = ppltn.findtext("AREA_NM")
-            congest_lvl = ppltn.findtext("AREA_CONGEST_LVL")
-            congest_msg = ppltn.findtext("AREA_CONGEST_MSG")
-            ppltn_min = int(ppltn.findtext("AREA_PPLTN_MIN"))
-            ppltn_max = int(ppltn.findtext("AREA_PPLTN_MAX"))
-            male = float(ppltn.findtext("MALE_PPLTN_RATE"))
-            female = float(ppltn.findtext("FEMALE_PPLTN_RATE"))
-            ppltn_time = ppltn.findtext("PPLTN_TIME")
-            
-            st.subheader(f"📍 {area_name} (업데이트: {ppltn_time})")
-            col1, col2 = st.columns(2)
-            col1.metric("혼잡도", congest_lvl)
-            col2.metric("현재 인구 (명)", f"{ppltn_min:,} ~ {ppltn_max:,}")
-            st.info(congest_msg)
-            
-            # -------------------------------
-            # 성별 비율 Plotly Pie
-            # -------------------------------
-            st.write("### 👥 성별 비율")
-            gender_df = pd.DataFrame({
-                "성별": ["남성", "여성"],
-                "비율": [male, female]
+@st.cache_data
+def get_all_places():
+    url = f"{BASE_URL}/{API_KEY}/{TYPE}/{SERVICE}/{START_INDEX}/{END_INDEX}"
+    response = requests.get(url, timeout=10)
+    if response.status_code != 200:
+        st.error(f"API 요청 실패: {response.status_code}")
+        return pd.DataFrame()
+    
+    root = ET.fromstring(response.content)
+    items = root.findall(".//SeoulRtd.citydata_ppltn")
+    data = []
+    for item in items:
+        # 기본 데이터 추출
+        record = {
+            "AREA_NM": item.findtext("AREA_NM"),
+            "AREA_CD": item.findtext("AREA_CD"),
+            "AREA_CONGEST_LVL": item.findtext("AREA_CONGEST_LVL"),
+            "AREA_CONGEST_MSG": item.findtext("AREA_CONGEST_MSG"),
+            "AREA_PPLTN_MIN": item.findtext("AREA_PPLTN_MIN"),
+            "AREA_PPLTN_MAX": item.findtext("AREA_PPLTN_MAX"),
+            "MALE_PPLTN_RATE": item.findtext("MALE_PPLTN_RATE"),
+            "FEMALE_PPLTN_RATE": item.findtext("FEMALE_PPLTN_RATE"),
+            "PPLTN_RATE_0": item.findtext("PPLTN_RATE_0"),
+            "PPLTN_RATE_10": item.findtext("PPLTN_RATE_10"),
+            "PPLTN_RATE_20": item.findtext("PPLTN_RATE_20"),
+            "PPLTN_RATE_30": item.findtext("PPLTN_RATE_30"),
+            "PPLTN_RATE_40": item.findtext("PPLTN_RATE_40"),
+            "PPLTN_RATE_50": item.findtext("PPLTN_RATE_50"),
+            "PPLTN_RATE_60": item.findtext("PPLTN_RATE_60"),
+            "PPLTN_RATE_70": item.findtext("PPLTN_RATE_70"),
+            "RESNT_PPLTN_RATE": item.findtext("RESNT_PPLTN_RATE"),
+            "NON_RESNT_PPLTN_RATE": item.findtext("NON_RESNT_PPLTN_RATE"),
+            "REPLACE_YN": item.findtext("REPLACE_YN"),
+            "PPLTN_TIME": item.findtext("PPLTN_TIME"),
+            "FCST_YN": item.findtext("FCST_YN"),
+        }
+
+        # 예측 인구 데이터 추출
+        fcst_list = []
+        for fcst in item.findall(".//FCST_PPLTN"):
+            fcst_list.append({
+                "FCST_TIME": fcst.findtext("FCST_TIME"),
+                "FCST_CONGEST_LVL": fcst.findtext("FCST_CONGEST_LVL"),
+                "FCST_PPLTN_MIN": fcst.findtext("FCST_PPLTN_MIN"),
+                "FCST_PPLTN_MAX": fcst.findtext("FCST_PPLTN_MAX"),
             })
-            fig_pie = px.pie(gender_df, names='성별', values='비율', color='성별',
-                             color_discrete_map={'남성':'skyblue','여성':'lightpink'},
-                             title="현재 인구 성별 비율")
-            st.plotly_chart(fig_pie, use_container_width=True)
-            
-            dominant_gender = "남성" if male > female else "여성"
-            st.info(f"💡 현재 인구에서 가장 많은 성별: {dominant_gender}")
-            
-            # -------------------------------
-            # 예측 인구 데이터 Plotly Line
-            # -------------------------------
-            fcst_data = []
-            for f in ppltn.findall(".//FCST_PPLTN"):
-                fcst_data.append({
-                    "시간": f.findtext("FCST_TIME"),
-                    "혼잡도": f.findtext("FCST_CONGEST_LVL"),
-                    "예상 최소 인구": int(f.findtext("FCST_PPLTN_MIN")),
-                    "예상 최대 인구": int(f.findtext("FCST_PPLTN_MAX"))
-                })
-            if fcst_data:
-                df = pd.DataFrame(fcst_data)
-                st.write("### ⏰ 시간대별 인구 예측")
-                st.dataframe(df)
-                fig_line = px.line(df, x="시간", y=["예상 최소 인구", "예상 최대 인구"],
-                                   labels={"value":"인구 수", "variable":"구분"},
-                                   title="시간대별 인구 예측")
-                st.plotly_chart(fig_line, use_container_width=True)
-            
-            # -------------------------------
-            # Folium 지도 표시
-            # -------------------------------
-            st.write("### 🗺️ 위치 지도")
-            coords = {
-                "광화문·덕수궁": (37.5665, 126.9779),
-                "강남 MICE 관광특구": (37.508, 127.060),
-                "홍대 관광특구": (37.5563, 126.9239),
-                "잠실 관광특구": (37.5145, 127.1056),
-                "용산역": (37.5294, 126.9646),
-            }
-            lat, lon = coords.get(area_name, (37.5665, 126.9780))
-            m = folium.Map(location=[lat, lon], zoom_start=15)
-            folium.Marker([lat, lon], popup=area_name).add_to(m)
-            st_folium(m, width=700, height=500)
-            
-    except Exception as e:
-        st.error(f"데이터 조회 실패: {e}")
+        record["FCST_PPLTN"] = fcst_list
+        data.append(record)
+    
+    return pd.DataFrame(data)
+
+places_df = get_all_places()
+
+if places_df.empty:
+    st.warning("장소 데이터가 없습니다. API 키와 범위를 확인하세요.")
+else:
+    # -------------------------------
+    # 사용자 선택
+    # -------------------------------
+    area = st.selectbox("장소 선택", sorted(places_df["AREA_NM"].dropna().unique()))
+    
+    selected_data = places_df.loc[places_df["AREA_NM"] == area].iloc[0]
+
+    st.subheader(f"📍 {selected_data['AREA_NM']} (업데이트: {selected_data['PPLTN_TIME']})")
+
+    # -------------------------------
+    # 기본 지표
+    # -------------------------------
+    col1, col2 = st.columns(2)
+    col1.metric("혼잡도", selected_data["AREA_CONGEST_LVL"])
+    col2.metric("현재 인구 (명)", f"{int(selected_data['AREA_PPLTN_MIN']):,} ~ {int(selected_data['AREA_PPLTN_MAX']):,}")
+    st.info(selected_data["AREA_CONGEST_MSG"])
+
+    # -------------------------------
+    # 성별
+    # -------------------------------
+    st.write("### 👥 성별 비율")
+    import plotly.express as px
+    sex_df = pd.DataFrame({
+        "성별": ["남성", "여성"],
+        "비율": [float(selected_data["MALE_PPLTN_RATE"]), float(selected_data["FEMALE_PPLTN_RATE"])]
+    })
+    fig = px.pie(sex_df, names="성별", values="비율", title="성별 비율", hole=0.3)
+    st.plotly_chart(fig, use_container_width=True)
+    major_sex = sex_df.loc[sex_df["비율"].idxmax(), "성별"]
+    st.write(f"가장 많은 성별: **{major_sex}**")
+
+    # -------------------------------
+    # 연령별 비율
+    # -------------------------------
+    age_cols = ["PPLTN_RATE_0","PPLTN_RATE_10","PPLTN_RATE_20","PPLTN_RATE_30",
+                "PPLTN_RATE_40","PPLTN_RATE_50","PPLTN_RATE_60","PPLLN_RATE_70"]
+    st.write("### 👶👵 연령대 비율")
+    age_df = pd.DataFrame({
+        "연령대": ["0~10","10대","20대","30대","40대","50대","60대","70대 이상"],
+        "비율": [float(selected_data[c]) for c in ["PPLTN_RATE_0","PPLTN_RATE_10","PPLTN_RATE_20","PPLTN_RATE_30",
+                                                    "PPLTN_RATE_40","PPLTN_RATE_50","PPLTN_RATE_60","PPLTN_RATE_70"]]
+    })
+    st.bar_chart(age_df.set_index("연령대"))
+
+    # -------------------------------
+    # 예측 데이터
+    # -------------------------------
+    if selected_data["FCST_YN"] == "Y":
+        fcst_df = pd.DataFrame(selected_data["FCST_PPLTN"])
+        st.write("### ⏰ 시간대별 인구 예측")
+        st.dataframe(fcst_df)
+        st.line_chart(fcst_df.set_index("FCST_TIME")[["FCST_PPLTN_MIN","FCST_PPLTN_MAX"]])
+
+    # -------------------------------
+    # 전체 데이터 출력
+    # -------------------------------
+    st.write("### 🔍 API 원본 데이터")
+    st.json(selected_data.to_dict())
