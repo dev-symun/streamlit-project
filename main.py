@@ -1,101 +1,61 @@
 import streamlit as st
 import requests
-import xml.etree.ElementTree as ET
 import pandas as pd
-from urllib.parse import quote
 
-# -------------------------------
-# 기본 설정
-# -------------------------------
-st.set_page_config(page_title="서울시 실시간 인구 데이터", page_icon="📊", layout="wide")
-st.title("📊 서울시 실시간 인구 데이터 (citydata_ppltn)")
+# 1️⃣ API 키 불러오기
+API_KEY = st.secrets["API_KEY"]
 
-# -------------------------------
-# 사용자 입력
-# -------------------------------
-st.markdown("서울의 주요 지역 중 하나를 입력하세요 (예: 광화문·덕수궁, 명동, 강남 MICE 관광특구 등)")
-area = st.text_input("조회할 지역명 입력", "광화문·덕수궁")
+# 2️⃣ 서울시 25개 구 리스트
+SEOUL_DISTRICTS = [
+    "강남구", "강동구", "강북구", "강서구", "관악구", "광진구", "구로구", "금천구",
+    "노원구", "도봉구", "동대문구", "동작구", "마포구", "서대문구", "서초구",
+    "성동구", "성북구", "송파구", "양천구", "영등포구", "용산구", "은평구",
+    "종로구", "중구", "중랑구"
+]
 
-# -------------------------------
-# API 요청 URL 구성
-# -------------------------------
-API_KEY = "78665a616473796d3339716b4d446c"
-BASE_URL = "http://openapi.seoul.go.kr:8088"
-TYPE = "xml"
-SERVICE = "citydata_ppltn"
-START_INDEX = 1
-END_INDEX = 5
+# 3️⃣ 예시용 API URL (실제 사용 시 수정)
+API_URL = "https://api.example.com/places"  # 실제 API URL로 변경 필요
 
-# -------------------------------
-# API 요청
-# -------------------------------
-if st.button("📡 데이터 불러오기"):
-    try:
-        encoded_area = quote(area)
-        url = f"{BASE_URL}/{API_KEY}/{TYPE}/{SERVICE}/{START_INDEX}/{END_INDEX}/{encoded_area}"
+@st.cache_data
+def get_places():
+    """API 호출해서 장소 데이터 가져오기"""
+    headers = {"Authorization": f"Bearer {API_KEY}"}
+    res = requests.get(API_URL, headers=headers)
+    data = res.json()
 
-        response = requests.get(url)
-        if response.status_code != 200:
-            st.error(f"요청 실패 (HTTP {response.status_code})")
-        else:
-            root = ET.fromstring(response.content)
-            ppltn = root.find(".//SeoulRtd.citydata_ppltn")
+    # API 응답 예시: [{"name": "롯데월드", "address": "서울특별시 송파구 잠실동 240"}, ...]
+    df = pd.DataFrame(data)
 
-            if ppltn is None:
-                st.error("⚠️ 해당 지역의 데이터를 찾을 수 없습니다. (지역명을 정확히 입력하세요)")
-            else:
-                # -------------------------------
-                # 기본 인구 데이터 추출
-                # -------------------------------
-                area_name = ppltn.findtext("AREA_NM")
-                congest_lvl = ppltn.findtext("AREA_CONGEST_LVL")
-                congest_msg = ppltn.findtext("AREA_CONGEST_MSG")
-                ppltn_min = int(ppltn.findtext("AREA_PPLTN_MIN"))
-                ppltn_max = int(ppltn.findtext("AREA_PPLTN_MAX"))
-                male = float(ppltn.findtext("MALE_PPLTN_RATE"))
-                female = float(ppltn.findtext("FEMALE_PPLTN_RATE"))
-                ppltn_time = ppltn.findtext("PPLTN_TIME")
+    # 구 이름 추출
+    def extract_district(address):
+        for gu in SEOUL_DISTRICTS:
+            if gu in address:
+                return gu
+        return None
 
-                # -------------------------------
-                # 시각적 요약
-                # -------------------------------
-                st.subheader(f"📍 {area_name} (업데이트: {ppltn_time})")
-                col1, col2 = st.columns(2)
-                col1.metric("혼잡도", congest_lvl)
-                col2.metric("현재 인구 (명)", f"{ppltn_min:,} ~ {ppltn_max:,}")
+    df["구"] = df["address"].apply(extract_district)
+    return df.dropna(subset=["구"])
 
-                st.info(congest_msg)
+# 4️⃣ 메인 앱
+st.title("서울시 지역별 장소 탐색 🗺️")
 
-                # -------------------------------
-                # 성별 비율
-                # -------------------------------
-                st.write("### 👥 성별 비율")
-                st.progress(int(male))
-                st.write(f"남성 {male}% / 여성 {female}%")
+with st.spinner("데이터 불러오는 중..."):
+    places_df = get_places()
 
-                # -------------------------------
-                # 예측 인구 데이터
-                # -------------------------------
-                fcst_data = []
-                for f in ppltn.findall(".//FCST_PPLTN"):
-                    fcst_data.append({
-                        "시간": f.findtext("FCST_TIME"),
-                        "혼잡도": f.findtext("FCST_CONGEST_LVL"),
-                        "예상 최소 인구": int(f.findtext("FCST_PPLTN_MIN")),
-                        "예상 최대 인구": int(f.findtext("FCST_PPLTN_MAX"))
-                    })
+# 5️⃣ 구 선택 콤보박스
+selected_gu = st.selectbox("📍 먼저 구를 선택하세요", sorted(places_df["구"].unique()))
 
-                if fcst_data:
-                    df = pd.DataFrame(fcst_data)
-                    st.write("### ⏰ 시간대별 인구 예측")
-                    st.dataframe(df)
+# 6️⃣ 선택한 구에 속한 장소 필터링
+filtered_places = places_df[places_df["구"] == selected_gu]
 
-                    # -------------------------------
-                    # 시각화
-                    # -------------------------------
-                    st.line_chart(df.set_index("시간")[["예상 최소 인구", "예상 최대 인구"]])
-                else:
-                    st.warning("예측 데이터가 없습니다.")
+# 7️⃣ 장소 선택 콤보박스
+selected_place = st.selectbox("🏠 장소를 선택하세요", filtered_places["name"].tolist())
 
-    except Exception as e:
-        st.error(f"오류 발생: {e}")
+# 8️⃣ 선택한 장소의 정보 표시
+place_info = filtered_places[filtered_places["name"] == selected_place].iloc[0]
+st.markdown(f"### 📖 {selected_place}")
+st.write(f"**주소:** {place_info['address']}")
+
+# 추가 정보가 있다면 여기에 표시
+if "description" in place_info:
+    st.write(f"**설명:** {place_info['description']}")
