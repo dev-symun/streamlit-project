@@ -103,7 +103,7 @@ if st.session_state.loaded and st.session_state.ppltn_node is not None:
     img_idx = {"여유":"5","보통":"4","혼잡":"7"}.get(congest_lvl,"4")
     img_path = f"images/{img_idx}.png"
     if os.path.exists(img_path):
-        st.image(img_path, width=300, use_column_width=False)
+        st.image(img_path, use_container_width=True)
 
     # 풍선 애니메이션 (데이터 로딩 완료 후)
     st.markdown(f"""
@@ -149,58 +149,4 @@ if st.session_state.loaded and st.session_state.ppltn_node is not None:
     # 탭 메뉴: 성별, 연령대, 시간대별, 지도
     tab1, tab2, tab3, tab4 = st.tabs(["성별(원형)","연령대","시간대별(선)","지도"])
 
-    # 성별 원형
-    with tab1:
-        male = float(node.findtext("MALE_PPLTN_RATE") or 0)
-        female = float(node.findtext("FEMALE_PPLTN_RATE") or 0)
-        df_gender = pd.DataFrame({"성별":["남성","여성"], "비율":[male,female]})
-        fig = px.pie(
-            df_gender,
-            names='성별',
-            values='비율',
-            hole=0.25,
-            color='성별',
-            color_discrete_map={'남성':'#1f77b4','여성':'#ff69b4'},
-            title="현재 인구 성별 비율"
-        )
-        st.plotly_chart(fig, use_container_width=True)
-
-    # 연령대
-    with tab2:
-        labels = ["0대","10대","20대","30대","40대","50대","60대","70대"]
-        cols = ["PPLTN_RATE_0","PPLTN_RATE_10","PPLTN_RATE_20","PPLTN_RATE_30","PPLTN_RATE_40",
-                "PPLTN_RATE_50","PPLTN_RATE_60","PPLTN_RATE_70"]
-        vals = [float(node.findtext(c) or 0) for c in cols]
-        df_age = pd.DataFrame({"연령대":labels,"비율":vals})
-        st.plotly_chart(px.bar(df_age, x="연령대", y="비율",
-                               color="연령대", color_discrete_sequence=px.colors.qualitative.Pastel,
-                               title="연령대별 비율"), use_container_width=True)
-
-    # 시간대별 인구 선 그래프
-    with tab3:
-        fcst_rows = []
-        for f in node.findall(".//FCST_PPLTN"):
-            fcst_rows.append({"시간": f.findtext("FCST_TIME"), "예상": int(f.findtext("FCST_PPLTN_MAX") or 0)})
-        if fcst_rows:
-            df_fc = pd.DataFrame(fcst_rows)
-            st.plotly_chart(px.line(df_fc, x="시간", y="예상", markers=True,
-                                    line_shape='linear',
-                                    color_discrete_sequence=px.colors.qualitative.T10,
-                                    title="시간대별 예상 인구"), use_container_width=True)
-        else:
-            st.info("예측 데이터 없음.")
-
-    # 지도
-    with tab4:
-        coords = {
-            "광화문·덕수궁":(37.5665,126.9779), "코엑스":(37.508,127.060), "홍대 관광특구":(37.5563,126.9239),
-            "강남 MICE 관광특구":(37.508,127.060),"이태원 관광특구":(37.534,126.990),"잠실 관광특구":(37.5145,127.1056),
-            "여의도":(37.525,126.924),"영등포 타임스퀘어":(37.526,126.897)
-        }
-        lat, lon = coords.get(area_name, (37.5665,126.9780))
-        m = folium.Map(location=[lat, lon], zoom_start=15)
-        folium.Marker([lat, lon], popup=area_name).add_to(m)
-        st_folium(m, width=700, height=420)
-
-else:
-    st.info("왼쪽 사이드바에서 구/장소 선택 후 '데이터 로딩 시작!' 버튼을 눌러주세요.")
+    # 성별 원
