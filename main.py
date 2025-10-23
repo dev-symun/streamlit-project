@@ -8,14 +8,12 @@ import plotly.express as px
 import folium
 from streamlit_folium import st_folium
 import os
-
-# OpenAI v1+
 from openai import OpenAI
 
 st.set_page_config(page_title="서울시 실시간 인구데이터 분석", layout="wide")
 
 # -------------------------------
-# 배경색 노란색
+# 전체 배경 노란색
 # -------------------------------
 st.markdown("""
 <style>
@@ -102,10 +100,10 @@ if st.session_state.loaded and st.session_state.ppltn_node is not None:
     st.markdown(f"**데이터 기준 시각:** {data_time}")
 
     # 혼잡도 이미지
-    img_idx = {"여유":"1","보통":"4","혼잡":"7"}.get(congest_lvl,"4")
+    img_idx = {"여유":"5","보통":"4","혼잡":"7"}.get(congest_lvl,"4")
     img_path = f"images/{img_idx}.png"
     if os.path.exists(img_path):
-        st.image(img_path, width=250)
+        st.image(img_path, width=300, use_column_width=False)
 
     # 풍선 애니메이션 (데이터 로딩 완료 후)
     st.markdown(f"""
@@ -153,11 +151,18 @@ if st.session_state.loaded and st.session_state.ppltn_node is not None:
 
     # 성별 원형
     with tab1:
-        male = float(node.findtext("MALE_PPLLN_RATE") or 0)
-        female = float(node.findtext("FEMALE_PPLLN_RATE") or 0)
+        male = float(node.findtext("MALE_PPLTN_RATE") or 0)
+        female = float(node.findtext("FEMALE_PPLTN_RATE") or 0)
         df_gender = pd.DataFrame({"성별":["남성","여성"], "비율":[male,female]})
-        fig = px.pie(df_gender, names='성별', values='비율', hole=0.25,
-                     color='성별', color_discrete_map={'남성':'#1f77b4','여성':'#ff69b4'})
+        fig = px.pie(
+            df_gender,
+            names='성별',
+            values='비율',
+            hole=0.25,
+            color='성별',
+            color_discrete_map={'남성':'#1f77b4','여성':'#ff69b4'},
+            title="현재 인구 성별 비율"
+        )
         st.plotly_chart(fig, use_container_width=True)
 
     # 연령대
