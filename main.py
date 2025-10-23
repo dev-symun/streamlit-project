@@ -28,9 +28,9 @@ st.markdown(
 openai.api_key = st.secrets.get("OPENAI_API_KEY", "YOUR_OPENAI_API_KEY")
 
 def summarize_with_gpt(text):
-    """ChatGPT API로 요약"""
+    """최신 OpenAI SDK 방식으로 요약"""
     try:
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "서울시 실시간 인구 데이터를 간단히 요약해줘."},
@@ -40,7 +40,6 @@ def summarize_with_gpt(text):
         return response.choices[0].message.content.strip()
     except Exception as e:
         return f"요약 실패: {e}"
-
 # -------------------------------
 # 지역 목록
 # -------------------------------
