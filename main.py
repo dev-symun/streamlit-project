@@ -28,10 +28,14 @@ body { background: #FFF8DC; font-family: 'Nanum Gothic', sans-serif; }
 # 사이드바: 구/장소 선택 + 데이터 로딩
 # -------------------------------
 places_by_district = {
-    "강남구": ["코엑스","강남역","강남 MICE 관광특구"],
-    "종로구": ["광화문·덕수궁","경복궁","인사동"],
-    "마포구": ["홍대 관광특구","망원한강공원","연남동"],
+    "강남구": ["강남 MICE 관광특구", "코엑스", "강남역", "선릉역", "역삼역", "압구정로데오거리"],
+    "종로구": ["광화문·덕수궁", "경복궁", "보신각", "창덕궁·종묘", "인사동", "청계천"],
+    "마포구": ["홍대 관광특구", "홍대입구역", "망원한강공원", "상수역", "연남동"],
+    "용산구": ["이태원 관광특구", "용산역", "남산타워", "국립중앙박물관·용산가족공원"],
+    "송파구": ["잠실 관광특구", "롯데월드", "석촌호수", "잠실한강공원"],
+    "영등포구": ["여의도", "영등포 타임스퀘어", "여의도한강공원", "63빌딩"]
 }
+
 st.sidebar.header("조회 옵션")
 district = st.sidebar.selectbox("구 선택", sorted(places_by_district.keys()))
 place = st.sidebar.selectbox("장소 선택", sorted(places_by_district[district]))
@@ -103,7 +107,7 @@ if st.session_state.loaded and st.session_state.ppltn_node is not None:
     if os.path.exists(img_path):
         st.image(img_path, width=250)
 
-    # 풍선 애니메이션 (JS 오류 수정)
+    # 풍선 애니메이션 (데이터 로딩 완료 후)
     st.markdown(f"""
     <script>
     const count = 15;
@@ -128,7 +132,7 @@ if st.session_state.loaded and st.session_state.ppltn_node is not None:
     if client is None:
         st.warning("ChatGPT API 키가 설정되어 있지 않아 AI 분석을 생략합니다.")
     else:
-        prompt = f"{area_name} 현재 혼잡도: {congest_lvl}. 인구: {ppltn_min}~{ppltn_max}. 개선방안과 추천 시간대 2개를 간단히 써줘."
+        prompt = f"{area_name} 현재 혼잡도: {congest_lvl}. 인구: {ppltn_min}~{ppltn_max}. 개선방안과 추천 시간대 2개를 간단히 이모티콘과 함께 알려줘."
         try:
             resp = client.chat.completions.create(
                 model="gpt-4o-mini",
@@ -142,15 +146,15 @@ if st.session_state.loaded and st.session_state.ppltn_node is not None:
         except Exception as e:
             st.warning(f"ChatGPT API 호출 실패: {e}")
     if gpt_result:
-        st.success(gpt_result)
+        st.success(f"🤖 AI 분석: {gpt_result}")
 
     # 탭 메뉴: 성별, 연령대, 시간대별, 지도
     tab1, tab2, tab3, tab4 = st.tabs(["성별(원형)","연령대","시간대별(선)","지도"])
 
     # 성별 원형
     with tab1:
-        male = float(node.findtext("MALE_PPLTN_RATE") or 0)
-        female = float(node.findtext("FEMALE_PPLTN_RATE") or 0)
+        male = float(node.findtext("MALE_PPLLN_RATE") or 0)
+        female = float(node.findtext("FEMALE_PPLLN_RATE") or 0)
         df_gender = pd.DataFrame({"성별":["남성","여성"], "비율":[male,female]})
         fig = px.pie(df_gender, names='성별', values='비율', hole=0.25,
                      color='성별', color_discrete_map={'남성':'#1f77b4','여성':'#ff69b4'})
@@ -183,7 +187,11 @@ if st.session_state.loaded and st.session_state.ppltn_node is not None:
 
     # 지도
     with tab4:
-        coords = {"광화문·덕수궁":(37.5665,126.9779), "코엑스":(37.508,127.060), "홍대 관광특구":(37.5563,126.9239)}
+        coords = {
+            "광화문·덕수궁":(37.5665,126.9779), "코엑스":(37.508,127.060), "홍대 관광특구":(37.5563,126.9239),
+            "강남 MICE 관광특구":(37.508,127.060),"이태원 관광특구":(37.534,126.990),"잠실 관광특구":(37.5145,127.1056),
+            "여의도":(37.525,126.924),"영등포 타임스퀘어":(37.526,126.897)
+        }
         lat, lon = coords.get(area_name, (37.5665,126.9780))
         m = folium.Map(location=[lat, lon], zoom_start=15)
         folium.Marker([lat, lon], popup=area_name).add_to(m)
