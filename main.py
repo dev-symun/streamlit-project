@@ -18,7 +18,7 @@ st.set_page_config(page_title="서울시 실시간 인구데이터 분석", layo
 st.markdown("""
 <style>
 body { background-color: #FFF8DC; font-family: 'Nanum Gothic', sans-serif; }
-.center-img { display: block; margin-left: auto; margin-right: auto; width: 50%; }
+.center-img { display: block; margin-left: auto; margin-right: auto; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -103,15 +103,15 @@ if st.session_state.loaded and st.session_state.ppltn_node is not None:
     img_idx = {"여유":"1","보통":"4","혼잡":"7"}.get(congest_lvl,"4")
     img_path = f"images/{img_idx}.png"
     if os.path.exists(img_path):
-        st.image(img_path, use_column_width=False, width=400, caption="혼잡도 이미지", output_format="PNG")
+        st.markdown(f'<div style="text-align:center"><img src="{img_path}" width="400" class="center-img"></div>', unsafe_allow_html=True)
 
     # 탭 메뉴: 성별, 연령대, 시간대별, 지도
     tab1, tab2, tab3, tab4 = st.tabs(["성별(원형)","연령대","시간대별(선)","지도"])
 
     # 성별 원형
     with tab1:
-        male = float(node.findtext("MALE_PPLLN_RATE") or 0)
-        female = float(node.findtext("FEMALE_PPLLN_RATE") or 0)
+        male = float(node.findtext("MALE_PPLTN_RATE") or 0)
+        female = float(node.findtext("FEMALE_PPLTN_RATE") or 0)
         df_gender = pd.DataFrame({"성별":["남성","여성"], "비율":[male,female]})
         fig = px.pie(df_gender, names='성별', values='비율', hole=0.3,
                      color='성별', color_discrete_map={'남성':'#1f77b4','여성':'#ff69b4'},
