@@ -124,25 +124,26 @@ if st.session_state.loaded and st.session_state.ppltn_node is not None:
         st.image(img_path, width=250)
 
     # 풍선 애니메이션
-    st.markdown(f"""
-    <script>
-    const count = 15;
-    for(let i=0;i<count;i++){{
-        const b = document.createElement('div');
-        b.className='balloon';
-        b.textContent='🎈';
-        b.style.left = Math.random()*100 + 'vw';
-        b.style.fontSize = {(30 + (10*count/15))}px;
-        b.style.opacity = 0.8;
-        b.style.color = '{congest_color}';
-        b.style.animation = `rise ${4 + Math.random()*6}s linear ${Math.random()*2}s infinite`;
-        document.body.appendChild(b);
-    }}
-    </script>
-    <style>
-    @keyframes rise {{0%{{transform: translateY(100vh);}}100%{{transform: translateY(-10vh);}}}}
-    </style>
-    """, unsafe_allow_html=True)
+balloon_size = 30 + (10*15/15)  # count=15 기준
+st.markdown(f"""
+<script>
+const count = 15;
+for(let i=0;i<count;i++){{
+    const b = document.createElement('div');
+    b.className='balloon';
+    b.textContent='🎈';
+    b.style.left = Math.random()*100 + 'vw';
+    b.style.fontSize = '{balloon_size}px';
+    b.style.opacity = 0.8;
+    b.style.color = '{congest_color}';
+    b.style.animation = `rise ${4 + Math.random()*6}s linear ${Math.random()*2}s infinite`;
+    document.body.appendChild(b);
+}}
+</script>
+<style>
+@keyframes rise {{0%{{transform: translateY(100vh);}}100%{{transform: translateY(-10vh);}}}}
+</style>
+""", unsafe_allow_html=True)
 
     # ChatGPT 분석
     gpt_result = None
