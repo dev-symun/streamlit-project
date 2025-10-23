@@ -8,24 +8,22 @@ import plotly.express as px
 import folium
 from streamlit_folium import st_folium
 import os
-
-# OpenAI v1+
 from openai import OpenAI
 
 st.set_page_config(page_title="서울시 실시간 인구데이터 분석", layout="wide")
 
 # -------------------------------
-# 배경색 노란색
+# 전체 배경 노란색 + 폰트
 # -------------------------------
 st.markdown("""
 <style>
-body { background: #FFF8DC; font-family: 'Nanum Gothic', sans-serif; }
-.balloon { position: fixed; pointer-events: none; z-index:9999; }
+body { background-color: #FFF8DC; font-family: 'Nanum Gothic', sans-serif; }
+.center-img { display: block; margin-left: auto; margin-right: auto; width: 50%; }
 </style>
 """, unsafe_allow_html=True)
 
 # -------------------------------
-# 사이드바: 구/장소 선택 + 데이터 로딩
+# 사이드바
 # -------------------------------
 places_by_district = {
     "강남구": ["강남 MICE 관광특구", "코엑스", "강남역", "선릉역", "역삼역", "압구정로데오거리"],
@@ -56,7 +54,7 @@ if "loaded" not in st.session_state:
     st.session_state.loaded = False
 
 # -------------------------------
-# 데이터 불러오기 함수
+# 데이터 불러오기
 # -------------------------------
 def fetch_and_store(place_name):
     API_KEY = "78665a616473796d3339716b4d446c"
@@ -97,56 +95,15 @@ if st.session_state.loaded and st.session_state.ppltn_node is not None:
     color_map = {"여유":"#3CB371","보통":"#FFD700","혼잡":"#FF4500"}
     congest_color = color_map.get(congest_lvl,"#FFD700")
 
-    # 혼잡도 상단 표시 + 이미지
+    # 혼잡도 상단 표시
     st.markdown(f"# 📊 {area_name} — 현재 혼잡도: <span style='color:{congest_color}'>**{congest_lvl}**</span> 🌟", unsafe_allow_html=True)
     st.markdown(f"**데이터 기준 시각:** {data_time}")
 
-    # 혼잡도 이미지
+    # 혼잡도 이미지 크게 & 가운데 정렬
     img_idx = {"여유":"1","보통":"4","혼잡":"7"}.get(congest_lvl,"4")
     img_path = f"images/{img_idx}.png"
     if os.path.exists(img_path):
-        st.image(img_path, width=250)
-
-    # 풍선 애니메이션 (데이터 로딩 완료 후)
-    st.markdown(f"""
-    <script>
-    const count = 15;
-    for(let i=0;i<count;i++){{
-        const b = document.createElement('div');
-        b.className='balloon';
-        b.textContent='🎈';
-        b.style.left = Math.random()*100 + 'vw';
-        b.style.fontSize = '40px';
-        b.style.opacity = 0.8;
-        b.style.color = '{congest_color}';
-        b.style.transition = 'transform 5s linear';
-        b.style.transform = 'translateY(100vh)';
-        setTimeout(()=>{{ b.style.transform = 'translateY(-10vh)'; }}, i*200);
-        document.body.appendChild(b);
-    }}
-    </script>
-    """, unsafe_allow_html=True)
-
-    # ChatGPT 분석
-    gpt_result = None
-    if client is None:
-        st.warning("ChatGPT API 키가 설정되어 있지 않아 AI 분석을 생략합니다.")
-    else:
-        prompt = f"{area_name} 현재 혼잡도: {congest_lvl}. 인구: {ppltn_min}~{ppltn_max}. 개선방안과 추천 시간대 2개를 간단히 이모티콘과 함께 알려줘."
-        try:
-            resp = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role":"system","content":"당신은 도시 데이터 분석 전문가입니다."},
-                    {"role":"user","content":prompt}
-                ],
-                max_tokens=400
-            )
-            gpt_result = resp.choices[0].message.content.strip() if resp and resp.choices else None
-        except Exception as e:
-            st.warning(f"ChatGPT API 호출 실패: {e}")
-    if gpt_result:
-        st.success(f"🤖 AI 분석: {gpt_result}")
+        st.image(img_path, use_column_width=False, width=400, caption="혼잡도 이미지", output_format="PNG")
 
     # 탭 메뉴: 성별, 연령대, 시간대별, 지도
     tab1, tab2, tab3, tab4 = st.tabs(["성별(원형)","연령대","시간대별(선)","지도"])
@@ -156,46 +113,10 @@ if st.session_state.loaded and st.session_state.ppltn_node is not None:
         male = float(node.findtext("MALE_PPLLN_RATE") or 0)
         female = float(node.findtext("FEMALE_PPLLN_RATE") or 0)
         df_gender = pd.DataFrame({"성별":["남성","여성"], "비율":[male,female]})
-        fig = px.pie(df_gender, names='성별', values='비율', hole=0.25,
-                     color='성별', color_discrete_map={'남성':'#1f77b4','여성':'#ff69b4'})
+        fig = px.pie(df_gender, names='성별', values='비율', hole=0.3,
+                     color='성별', color_discrete_map={'남성':'#1f77b4','여성':'#ff69b4'},
+                     title="현재 인구 성별 비율")
         st.plotly_chart(fig, use_container_width=True)
-
-    # 연령대
-    with tab2:
-        labels = ["0대","10대","20대","30대","40대","50대","60대","70대"]
-        cols = ["PPLTN_RATE_0","PPLTN_RATE_10","PPLTN_RATE_20","PPLTN_RATE_30","PPLTN_RATE_40",
-                "PPLTN_RATE_50","PPLTN_RATE_60","PPLTN_RATE_70"]
-        vals = [float(node.findtext(c) or 0) for c in cols]
-        df_age = pd.DataFrame({"연령대":labels,"비율":vals})
-        st.plotly_chart(px.bar(df_age, x="연령대", y="비율",
-                               color="연령대", color_discrete_sequence=px.colors.qualitative.Pastel,
-                               title="연령대별 비율"), use_container_width=True)
-
-    # 시간대별 인구 선 그래프
-    with tab3:
-        fcst_rows = []
-        for f in node.findall(".//FCST_PPLTN"):
-            fcst_rows.append({"시간": f.findtext("FCST_TIME"), "예상": int(f.findtext("FCST_PPLTN_MAX") or 0)})
-        if fcst_rows:
-            df_fc = pd.DataFrame(fcst_rows)
-            st.plotly_chart(px.line(df_fc, x="시간", y="예상", markers=True,
-                                    line_shape='linear',
-                                    color_discrete_sequence=px.colors.qualitative.T10,
-                                    title="시간대별 예상 인구"), use_container_width=True)
-        else:
-            st.info("예측 데이터 없음.")
-
-    # 지도
-    with tab4:
-        coords = {
-            "광화문·덕수궁":(37.5665,126.9779), "코엑스":(37.508,127.060), "홍대 관광특구":(37.5563,126.9239),
-            "강남 MICE 관광특구":(37.508,127.060),"이태원 관광특구":(37.534,126.990),"잠실 관광특구":(37.5145,127.1056),
-            "여의도":(37.525,126.924),"영등포 타임스퀘어":(37.526,126.897)
-        }
-        lat, lon = coords.get(area_name, (37.5665,126.9780))
-        m = folium.Map(location=[lat, lon], zoom_start=15)
-        folium.Marker([lat, lon], popup=area_name).add_to(m)
-        st_folium(m, width=700, height=420)
 
 else:
     st.info("왼쪽 사이드바에서 구/장소 선택 후 '데이터 로딩 시작!' 버튼을 눌러주세요.")
