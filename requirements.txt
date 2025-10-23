@@ -4,4 +4,4 @@ requests
 folium
 streamlit-folium
 plotly.express
-openai
+openai>=1.0.0
