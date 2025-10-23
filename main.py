@@ -15,17 +15,19 @@ from openai import OpenAI
 st.set_page_config(page_title="서울시 실시간 인구데이터 분석", layout="wide")
 
 # -------------------------------
-# 배경색 노란색 + 흩어지는 눈(하늘색, 크기 크게)
+# 배경색 노란색 + 눈 효과
 # -------------------------------
 st.markdown("""
 <style>
 body { background: #FFF8DC; font-family: 'Nanum Gothic', sans-serif; }
 .snowflake { position: fixed; top: -10px; pointer-events: none; z-index:9999; color: #00BFFF; }
+.balloon { position: fixed; pointer-events: none; z-index:9999; }
 </style>
 <script>
 (function(){
-  const count = 50;
-  for (let i=0;i<count;i++){
+  // 눈
+  const snow_count = 50;
+  for (let i=0;i<snow_count;i++){
     const s = document.createElement('div');
     s.className='snowflake';
     s.textContent='❄';
@@ -106,14 +108,41 @@ if st.session_state.loaded and st.session_state.ppltn_node is not None:
     congest_lvl = node.findtext("AREA_CONGEST_LVL") or "정보없음"
     ppltn_min = int(node.findtext("AREA_PPLTN_MIN") or 0)
     ppltn_max = int(node.findtext("AREA_PPLTN_MAX") or 0)
+    data_time = node.findtext("PPLTN_TIME") or "정보없음"
 
-    # 혼잡도 상단 표시 + 이미지
-    st.markdown(f"# {area_name} — 현재 혼잡도: **{congest_lvl}**")
-    map_level_to_img = {"여유":"1","보통":"4","혼잡":"7"}
-    img_idx = map_level_to_img.get(congest_lvl, "4")
+    # 혼잡도 색상
+    color_map = {"여유":"#3CB371","보통":"#FFD700","혼잡":"#FF4500"}
+    congest_color = color_map.get(congest_lvl,"#FFD700")
+
+    # 혼잡도 상단 표시 + 이미지 + 풍선
+    st.markdown(f"# 📊 {area_name} — 현재 혼잡도: <span style='color:{congest_color}'>**{congest_lvl}**</span> 🌟", unsafe_allow_html=True)
+    st.markdown(f"**데이터 기준 시각:** {data_time}")
+
+    img_idx = {"여유":"1","보통":"4","혼잡":"7"}.get(congest_lvl,"4")
     img_path = f"images/{img_idx}.png"
     if os.path.exists(img_path):
         st.image(img_path, width=250)
+
+    # 풍선 애니메이션
+    st.markdown(f"""
+    <script>
+    const count = 15;
+    for(let i=0;i<count;i++){{
+        const b = document.createElement('div');
+        b.className='balloon';
+        b.textContent='🎈';
+        b.style.left = Math.random()*100 + 'vw';
+        b.style.fontSize = {(30 + (10*count/15))}px;
+        b.style.opacity = 0.8;
+        b.style.color = '{congest_color}';
+        b.style.animation = `rise ${4 + Math.random()*6}s linear ${Math.random()*2}s infinite`;
+        document.body.appendChild(b);
+    }}
+    </script>
+    <style>
+    @keyframes rise {{0%{{transform: translateY(100vh);}}100%{{transform: translateY(-10vh);}}}}
+    </style>
+    """, unsafe_allow_html=True)
 
     # ChatGPT 분석
     gpt_result = None
@@ -144,16 +173,20 @@ if st.session_state.loaded and st.session_state.ppltn_node is not None:
         male = float(node.findtext("MALE_PPLTN_RATE") or 0)
         female = float(node.findtext("FEMALE_PPLTN_RATE") or 0)
         df_gender = pd.DataFrame({"성별":["남성","여성"], "비율":[male,female]})
-        fig = px.pie(df_gender, names='성별', values='비율', hole=0.25, title="성별 비율")
+        fig = px.pie(df_gender, names='성별', values='비율', hole=0.25,
+                     color='성별', color_discrete_map={'남성':'#1f77b4','여성':'#ff69b4'})
         st.plotly_chart(fig, use_container_width=True)
 
     # 연령대
     with tab2:
         labels = ["0대","10대","20대","30대","40대","50대","60대","70대"]
-        cols = ["PPLTN_RATE_0","PPLTN_RATE_10","PPLTN_RATE_20","PPLTN_RATE_30","PPLTN_RATE_40","PPLTN_RATE_50","PPLTN_RATE_60","PPLTN_RATE_70"]
+        cols = ["PPLTN_RATE_0","PPLTN_RATE_10","PPLTN_RATE_20","PPLTN_RATE_30","PPLTN_RATE_40",
+                "PPLTN_RATE_50","PPLTN_RATE_60","PPLTN_RATE_70"]
         vals = [float(node.findtext(c) or 0) for c in cols]
         df_age = pd.DataFrame({"연령대":labels,"비율":vals})
-        st.plotly_chart(px.bar(df_age, x="연령대", y="비율", title="연령대별 비율"), use_container_width=True)
+        st.plotly_chart(px.bar(df_age, x="연령대", y="비율",
+                               color="연령대", color_discrete_sequence=px.colors.qualitative.Pastel,
+                               title="연령대별 비율"), use_container_width=True)
 
     # 시간대별 인구 선 그래프
     with tab3:
@@ -162,7 +195,10 @@ if st.session_state.loaded and st.session_state.ppltn_node is not None:
             fcst_rows.append({"시간": f.findtext("FCST_TIME"), "예상": int(f.findtext("FCST_PPLTN_MAX") or 0)})
         if fcst_rows:
             df_fc = pd.DataFrame(fcst_rows)
-            st.plotly_chart(px.line(df_fc, x="시간", y="예상", markers=True, title="시간대별 예상 인구"), use_container_width=True)
+            st.plotly_chart(px.line(df_fc, x="시간", y="예상", markers=True,
+                                    line_shape='linear',
+                                    color_discrete_sequence=px.colors.qualitative.T10,
+                                    title="시간대별 예상 인구"), use_container_width=True)
         else:
             st.info("예측 데이터 없음.")
 
