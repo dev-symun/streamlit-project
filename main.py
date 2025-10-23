@@ -114,36 +114,37 @@ if st.session_state.loaded and st.session_state.ppltn_node is not None:
     color_map = {"여유":"#3CB371","보통":"#FFD700","혼잡":"#FF4500"}
     congest_color = color_map.get(congest_lvl,"#FFD700")
 
-    # 혼잡도 상단 표시 + 이미지 + 풍선
+    # 혼잡도 상단 표시 + 이미지
     st.markdown(f"# 📊 {area_name} — 현재 혼잡도: <span style='color:{congest_color}'>**{congest_lvl}**</span> 🌟", unsafe_allow_html=True)
     st.markdown(f"**데이터 기준 시각:** {data_time}")
 
+    # 혼잡도 이미지
     img_idx = {"여유":"1","보통":"4","혼잡":"7"}.get(congest_lvl,"4")
     img_path = f"images/{img_idx}.png"
     if os.path.exists(img_path):
         st.image(img_path, width=250)
 
     # 풍선 애니메이션
-balloon_size = 30 + (10*15/15)  # count=15 기준
-st.markdown(f"""
-<script>
-const count = 15;
-for(let i=0;i<count;i++){{
-    const b = document.createElement('div');
-    b.className='balloon';
-    b.textContent='🎈';
-    b.style.left = Math.random()*100 + 'vw';
-    b.style.fontSize = '{balloon_size}px';
-    b.style.opacity = 0.8;
-    b.style.color = '{congest_color}';
-    b.style.animation = `rise ${4 + Math.random()*6}s linear ${Math.random()*2}s infinite`;
-    document.body.appendChild(b);
-}}
-</script>
-<style>
-@keyframes rise {{0%{{transform: translateY(100vh);}}100%{{transform: translateY(-10vh);}}}}
-</style>
-""", unsafe_allow_html=True)
+    balloon_size = 40
+    st.markdown(f"""
+    <script>
+    const count = 15;
+    for(let i=0;i<count;i++){{
+        const b = document.createElement('div');
+        b.className='balloon';
+        b.textContent='🎈';
+        b.style.left = Math.random()*100 + 'vw';
+        b.style.fontSize = '{balloon_size}px';
+        b.style.opacity = 0.8;
+        b.style.color = '{congest_color}';
+        b.style.animation = `rise ${4 + Math.random()*6}s linear ${Math.random()*2}s infinite`;
+        document.body.appendChild(b);
+    }}
+    </script>
+    <style>
+    @keyframes rise {{0%{{transform: translateY(100vh);}}100%{{transform: translateY(-10vh);}}}}
+    </style>
+    """, unsafe_allow_html=True)
 
     # ChatGPT 분석
     gpt_result = None
