@@ -15,33 +15,12 @@ from openai import OpenAI
 st.set_page_config(page_title="서울시 실시간 인구데이터 분석", layout="wide")
 
 # -------------------------------
-# 배경색 노란색 + 눈 효과
+# 배경색 노란색
 # -------------------------------
 st.markdown("""
 <style>
 body { background: #FFF8DC; font-family: 'Nanum Gothic', sans-serif; }
-.snowflake { position: fixed; top: -10px; pointer-events: none; z-index:9999; color: #00BFFF; }
 .balloon { position: fixed; pointer-events: none; z-index:9999; }
-</style>
-<script>
-(function(){
-  // 눈
-  const snow_count = 50;
-  for (let i=0;i<snow_count;i++){
-    const s = document.createElement('div');
-    s.className='snowflake';
-    s.textContent='❄';
-    s.style.left = Math.random()*100 + 'vw';
-    s.style.fontSize = (20 + Math.random()*40) + 'px';
-    s.style.opacity = (0.4 + Math.random()*0.6);
-    s.style.animation = `fall ${4 + Math.random()*6}s linear ${Math.random()*2}s infinite`;
-    s.style.transform = `translateX(${(Math.random()-0.5)*200}px)`;
-    document.body.appendChild(s);
-  }
-})();
-</script>
-<style>
-@keyframes fall { 0% { transform: translateY(-10vh); } 100% { transform: translateY(110vh); } }
 </style>
 """, unsafe_allow_html=True)
 
@@ -124,8 +103,7 @@ if st.session_state.loaded and st.session_state.ppltn_node is not None:
     if os.path.exists(img_path):
         st.image(img_path, width=250)
 
-    # 풍선 애니메이션
-    balloon_size = 40
+    # 풍선 애니메이션 (JS 오류 수정)
     st.markdown(f"""
     <script>
     const count = 15;
@@ -134,16 +112,15 @@ if st.session_state.loaded and st.session_state.ppltn_node is not None:
         b.className='balloon';
         b.textContent='🎈';
         b.style.left = Math.random()*100 + 'vw';
-        b.style.fontSize = '{balloon_size}px';
+        b.style.fontSize = '40px';
         b.style.opacity = 0.8;
         b.style.color = '{congest_color}';
-        b.style.animation = `rise ${4 + Math.random()*6}s linear ${Math.random()*2}s infinite`;
+        b.style.transition = 'transform 5s linear';
+        b.style.transform = 'translateY(100vh)';
+        setTimeout(()=>{{ b.style.transform = 'translateY(-10vh)'; }}, i*200);
         document.body.appendChild(b);
     }}
     </script>
-    <style>
-    @keyframes rise {{0%{{transform: translateY(100vh);}}100%{{transform: translateY(-10vh);}}}}
-    </style>
     """, unsafe_allow_html=True)
 
     # ChatGPT 분석
